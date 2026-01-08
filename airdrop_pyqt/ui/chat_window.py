@@ -3,6 +3,8 @@ from PyQt6.QtWidgets import (
     QLineEdit, QPushButton
 )
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QFileDialog
+from network.file_sender import FileSender
 
 from network.tcp_client import SendMessageThread
 from storage.chat_db import ChatDB
@@ -59,6 +61,10 @@ class ChatWindow(QWidget):
             }
         """)
         send_btn.clicked.connect(self.send)
+        file_btn = QPushButton("📎 Send File")
+        file_btn.clicked.connect(self.send_file)
+        layout.addWidget(file_btn)
+
 
         layout.addWidget(self.chat_view)
         layout.addWidget(self.input)
@@ -136,6 +142,19 @@ class ChatWindow(QWidget):
         self.db.save_message(self.device.ip, "sent", msg)
         self.add_bubble(msg, "sent")
         self.input.clear()
+
+    def send_file(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select file")
+        if not file_path:
+            return
+
+        sender = FileSender(self.device.ip, file_path)
+        sender.start()
+
+        self.chat_view.append(
+            f"<i>📎 Sent file: {Path(file_path).name}</i>"
+        )
+
 
     # ---------- Receive ----------
     def receive(self, msg):

@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
+from network.file_server import FileServer
 from network.discovery import DiscoveryThread
 from network.tcp_server import TCPServer
 from models.device import Device
@@ -19,6 +20,8 @@ class DeviceTile(QFrame):
         super().__init__()
         self.device = device
         self.on_click = on_click
+        self.file_server = FileServer()
+        self.file_server.start()
 
         self.setFixedSize(140, 140)
         self.setStyleSheet("""
@@ -158,5 +161,7 @@ class MainWindow(QMainWindow):
 
         self.tcp_server.stop()
         self.tcp_server.terminate()
+        self.file_server.stop()
+        self.file_server.terminate()
 
         event.accept()
