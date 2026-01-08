@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+# Virtual environments
+venv/
+# OS files
+.DS_Store
+# IDE
+.vscode/
+
+*.dist/info/
+*.build/
+*.egg-info/
+build/
+dist/
+.eggs/
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+.nox/
+.pyre/
+.mypy_cache/        
