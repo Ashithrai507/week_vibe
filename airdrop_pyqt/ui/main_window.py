@@ -61,6 +61,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("PyDrop")
         self.setMinimumSize(900, 600)
         self.setStyleSheet("background-color: #121212;")
+        self.file_server = FileServer()
+        self.file_server.start()
 
         # UNIQUE DEVICE NAME (CRITICAL)
         self.device_name = f"{socket.gethostname()}-{platform.system()}"
@@ -163,5 +165,6 @@ class MainWindow(QMainWindow):
         self.tcp_server.terminate()
         self.file_server.stop()
         self.file_server.terminate()
-
+        self.file_server.stop()
+        self.file_server.wait()
         event.accept()
