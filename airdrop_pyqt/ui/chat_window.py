@@ -2,6 +2,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTextEdit,
     QLineEdit, QPushButton
 )
+from pathlib import Path
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QFileDialog
 from network.file_sender import FileSender
