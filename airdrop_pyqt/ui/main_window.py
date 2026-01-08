@@ -9,7 +9,8 @@ from PyQt6.QtCore import Qt, QTimer
 from models.device import Device
 from ui.chat_window import ChatWindow
 
-from network.udp_discovery import DiscoveryListener
+from network.discovery import DiscoveryThread
+
 from network.tcp_server import TCPServer
 from network.file_server import FileServer
 
@@ -58,7 +59,7 @@ class MainWindow(QMainWindow):
         self.file_server.start()
 
         # UDP DISCOVERY
-        self.discovery = DiscoveryListener(self.my_name)
+        self.discovery = DiscoveryThread(self.my_name)
         self.discovery.device_found.connect(self.add_device)
         self.discovery.start()
 
@@ -126,16 +127,29 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         print("Closing application...")
 
+        # ---- Stop discovery thread ----
         if hasattr(self, "discovery"):
-            self.discovery.stop()
-            self.discovery.wait()
+            try:
+                self.discovery.stop()
+                self.discovery.terminate()
+            except Exception as e:
+                print("Discovery shutdown error:", e)
 
+        # ---- Stop TCP server ----
         if hasattr(self, "tcp_server"):
-            self.tcp_server.stop()
-            self.tcp_server.wait()
+            try:
+                self.tcp_server.stop()
+                self.tcp_server.terminate()
+            except Exception as e:
+                print("TCP shutdown error:", e)
 
+        # ---- Stop File server ----
         if hasattr(self, "file_server"):
-            self.file_server.stop()
-            self.file_server.wait()
+            try:
+                self.file_server.stop()
+                self.file_server.terminate()
+            except Exception as e:
+                print("File server shutdown error:", e)
 
         event.accept()
+
