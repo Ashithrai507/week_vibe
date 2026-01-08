@@ -75,7 +75,13 @@ class MainWindow(QMainWindow):
         else:
             self.status.setText("Searching for nearby devices…")
 
-    def add_device(self, name, ip):
+    def add_device(self, data):
+        name = data.get("name")
+        ip = data.get("ip")
+
+        if not name or not ip:
+            return
+
         if ip in self.devices:
             return
 
@@ -102,6 +108,7 @@ class MainWindow(QMainWindow):
         row = (len(self.devices) - 1) // 4
         col = (len(self.devices) - 1) % 4
         self.grid.addWidget(btn, row, col)
+
 
     def open_chat(self, device):
         if device.ip in self.chat_windows:
