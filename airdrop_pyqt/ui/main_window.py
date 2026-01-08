@@ -1,169 +1,141 @@
 import socket
-import platform
-
+import json
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QLabel,
-    QVBoxLayout, QGridLayout, QFrame
+    QMainWindow, QWidget, QLabel, QVBoxLayout,
+    QGridLayout, QApplication
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 
-from network.file_server import FileServer
-from network.discovery import DiscoveryThread
-from network.tcp_server import TCPServer
 from models.device import Device
 from ui.chat_window import ChatWindow
 
-
-# ---------------- Device Tile ---------------- #
-class DeviceTile(QFrame):
-    def __init__(self, device, on_click):
-        super().__init__()
-        self.device = device
-        self.on_click = on_click
-        self.file_server = FileServer()
-        self.file_server.start()
-
-        self.setFixedSize(140, 140)
-        self.setStyleSheet("""
-            QFrame {
-                background-color: #1e1e1e;
-                border-radius: 14px;
-            }
-            QFrame:hover {
-                background-color: #2a2a2a;
-            }
-        """)
-
-        layout = QVBoxLayout()
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        icon = QLabel("💻")
-        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon.setStyleSheet("font-size: 36px;")
-
-        name = QLabel(device.name)
-        name.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        name.setStyleSheet("color: white;")
-
-        layout.addWidget(icon)
-        layout.addWidget(name)
-        self.setLayout(layout)
-
-    def mousePressEvent(self, event):
-        self.on_click(self.device)
+from network.udp_discovery import DiscoveryListener
+from network.tcp_server import TCPServer
+from network.file_server import FileServer
 
 
-# ---------------- Main Window ---------------- #
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
         self.setWindowTitle("PyDrop")
         self.setMinimumSize(900, 600)
-        self.setStyleSheet("background-color: #121212;")
-        self.file_server = FileServer()
-        self.file_server.start()
 
-        # UNIQUE DEVICE NAME (CRITICAL)
-        self.device_name = f"{socket.gethostname()}-{platform.system()}"
-        print("My device name:", self.device_name)
-
-        self.devices = {}        # ip -> Device
-        self.tiles = {}          # ip -> DeviceTile
-        self.chat_windows = {}   # ip -> ChatWindow
-
-        # -------- UI -------- #
+        # ---------- UI ----------
         central = QWidget()
         self.setCentralWidget(central)
 
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(30, 30, 30, 30)
-        main_layout.setSpacing(20)
+        self.layout = QVBoxLayout(central)
 
-        title = QLabel("PyDrop")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("font-size: 28px; color: white;")
+        self.title = QLabel("PyDrop")
+        self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.title.setStyleSheet("font-size:32px; font-weight:bold;")
+        self.layout.addWidget(self.title)
 
         self.status = QLabel("Searching for nearby devices…")
         self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status.setStyleSheet("color: #aaaaaa;")
+        self.status.setStyleSheet("color: gray;")
+        self.layout.addWidget(self.status)
 
         self.grid = QGridLayout()
-        self.grid.setSpacing(20)
-        self.grid.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.layout.addLayout(self.grid)
 
-        main_layout.addWidget(title)
-        main_layout.addWidget(self.status)
-        main_layout.addLayout(self.grid)
+        # ---------- DATA ----------
+        self.devices = {}
+        self.chat_windows = {}
 
-        central.setLayout(main_layout)
+        # ---------- NETWORK ----------
+        self.my_name = socket.gethostname()
+        print("My device name:", self.my_name)
 
-        # -------- Discovery -------- #
-        self.discovery = DiscoveryThread(self.device_name)
-        self.discovery.device_found.connect(self.add_device)
-        self.discovery.start()
-
-        # -------- TCP Server -------- #
+        # TCP CHAT SERVER
         self.tcp_server = TCPServer()
         self.tcp_server.message_received.connect(self.on_message_received)
         self.tcp_server.start()
 
-    # ---------------- Add Device ---------------- #
-    def add_device(self, info):
-        ip = info["ip"]
+        # FILE SERVER (FIXED)
+        self.file_server = FileServer()
+        self.file_server.start()
 
+        # UDP DISCOVERY
+        self.discovery = DiscoveryListener(self.my_name)
+        self.discovery.device_found.connect(self.add_device)
+        self.discovery.start()
+
+        # UI refresh timer
+        self.refresh_timer = QTimer()
+        self.refresh_timer.timeout.connect(self.refresh_status)
+        self.refresh_timer.start(2000)
+
+    # ---------- UI HELPERS ----------
+    def refresh_status(self):
+        if self.devices:
+            self.status.setText("Nearby devices found")
+        else:
+            self.status.setText("Searching for nearby devices…")
+
+    def add_device(self, name, ip):
         if ip in self.devices:
             return
 
-        device = Device(info["name"], ip, info["port"])
-        print("UI adding device:", device)
+        print(f"UI adding device: {name} ({ip})")
 
-        tile = DeviceTile(device, self.open_chat)
-
-        index = len(self.devices)
-        row = index // 4
-        col = index % 4
-
-        self.grid.addWidget(tile, row, col)
-
+        device = Device(name, ip)
         self.devices[ip] = device
-        self.tiles[ip] = tile
 
-        self.status.setText("Nearby devices found")
+        btn = QLabel(f"💻 {name}")
+        btn.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        btn.setFixedSize(160, 120)
+        btn.setStyleSheet("""
+            QLabel {
+                background-color: #1f1f1f;
+                border-radius: 12px;
+                color: white;
+            }
+            QLabel:hover {
+                background-color: #2c2c2c;
+            }
+        """)
+        btn.mousePressEvent = lambda e, d=device: self.open_chat(d)
 
-    # ---------------- Open Chat ---------------- #
+        row = (len(self.devices) - 1) // 4
+        col = (len(self.devices) - 1) % 4
+        self.grid.addWidget(btn, row, col)
+
     def open_chat(self, device):
         if device.ip in self.chat_windows:
-            chat = self.chat_windows[device.ip]
-            if chat.isVisible():
-                chat.raise_()
-                chat.activateWindow()
-                return
+            self.chat_windows[device.ip].raise_()
+            self.chat_windows[device.ip].activateWindow()
+            return
 
         chat = ChatWindow(device)
-        chat.destroyed.connect(lambda: self.chat_windows.pop(device.ip, None))
-        self.chat_windows[device.ip] = chat
         chat.show()
+        self.chat_windows[device.ip] = chat
 
-
-    # ---------------- Receive Message ---------------- #
+    # ---------- MESSAGE ROUTING ----------
     def on_message_received(self, ip, message):
-        if ip not in self.chat_windows and ip in self.devices:
-            self.open_chat(self.devices[ip])
+        if ip not in self.chat_windows:
+            device = self.devices.get(ip, Device(ip, ip))
+            chat = ChatWindow(device)
+            chat.show()
+            self.chat_windows[ip] = chat
 
-        if ip in self.chat_windows:
-            self.chat_windows[ip].receive(message)
+        self.chat_windows[ip].receive(message)
 
-    # ---------------- Close Cleanly ---------------- #
+    # ---------- CLEAN SHUTDOWN ----------
     def closeEvent(self, event):
         print("Closing application...")
 
-        self.discovery.stop()
-        self.discovery.terminate()
+        if hasattr(self, "discovery"):
+            self.discovery.stop()
+            self.discovery.wait()
 
-        self.tcp_server.stop()
-        self.tcp_server.terminate()
-        self.file_server.stop()
-        self.file_server.terminate()
-        self.file_server.wait()
+        if hasattr(self, "tcp_server"):
+            self.tcp_server.stop()
+            self.tcp_server.wait()
+
+        if hasattr(self, "file_server"):
+            self.file_server.stop()
+            self.file_server.wait()
+
         event.accept()

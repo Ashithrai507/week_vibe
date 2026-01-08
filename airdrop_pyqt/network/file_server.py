@@ -3,11 +3,10 @@ import json
 from pathlib import Path
 from PyQt6.QtCore import QThread, pyqtSignal
 from network.constants import FILE_PORT, CHUNK_SIZE
-from storage.app_paths import get_app_data_dir
 
 
 class FileServer(QThread):
-    file_received = pyqtSignal(str)  # filename
+    file_received = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -15,15 +14,20 @@ class FileServer(QThread):
 
     def run(self):
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        # ✅ VERY IMPORTANT: allow reuse
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
         server.bind(("0.0.0.0", FILE_PORT))
         server.listen(1)
+
+        print("📂 File server listening on port", FILE_PORT)
 
         while self.running:
             try:
                 conn, addr = server.accept()
 
-                # Receive metadata
+                # ---- receive metadata ----
                 meta_len = int.from_bytes(conn.recv(4), "big")
                 meta = json.loads(conn.recv(meta_len).decode())
 
@@ -31,7 +35,7 @@ class FileServer(QThread):
                 filesize = meta["filesize"]
 
                 download_dir = Path.home() / "Downloads" / "PyDrop"
-                download_dir.mkdir(exist_ok=True)
+                download_dir.mkdir(parents=True, exist_ok=True)
 
                 filepath = download_dir / filename
 
@@ -48,7 +52,8 @@ class FileServer(QThread):
                 self.file_received.emit(filename)
 
             except Exception as e:
-                print("File receive error:", e)
+                if self.running:
+                    print("File receive error:", e)
 
         server.close()
 
