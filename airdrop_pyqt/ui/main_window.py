@@ -165,6 +165,5 @@ class MainWindow(QMainWindow):
         self.tcp_server.terminate()
         self.file_server.stop()
         self.file_server.terminate()
-        self.file_server.stop()
         self.file_server.wait()
         event.accept()
