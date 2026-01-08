@@ -87,7 +87,7 @@ class MainWindow(QMainWindow):
 
         print(f"UI adding device: {name} ({ip})")
 
-        device = Device(name, ip)
+        device = Device(name, ip, 6000)
         self.devices[ip] = device
 
         btn = QLabel(f"💻 {name}")
@@ -108,6 +108,7 @@ class MainWindow(QMainWindow):
         row = (len(self.devices) - 1) // 4
         col = (len(self.devices) - 1) % 4
         self.grid.addWidget(btn, row, col)
+
 
 
     def open_chat(self, device):
