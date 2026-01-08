@@ -1,22 +1,35 @@
-# Python
+# --------------------
+# Python cache
+# --------------------
 __pycache__/
-# Virtual environments
-venv/
-# OS files
-.DS_Store
-# IDE
-.vscode/
+*.pyc
+*.pyo
 
-*.dist/info/
-*.build/
-*.egg-info/
+# --------------------
+# Virtual environment
+# --------------------
+venv/
+
+# --------------------
+# Build / distribution (PyInstaller, packaging)
+# --------------------
 build/
 dist/
-.eggs/
-.pytest_cache/
-.tox/
-.coverage
-htmlcov/
-.nox/
-.pyre/
-.mypy_cache/        
+*.spec
+
+# --------------------
+# Database / runtime files
+# --------------------
+chat.db
+
+# --------------------
+# OS / Editor files
+# --------------------
+.DS_Store
+.vscode/
+.idea/
+
+# --------------------
+# Logs
+# --------------------
+*.log
