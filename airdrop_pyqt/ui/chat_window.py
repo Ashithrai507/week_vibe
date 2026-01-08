@@ -15,6 +15,7 @@ class ChatWindow(QWidget):
     def __init__(self, device):
         super().__init__()
         self.device = device
+        self.file_threads = []
 
         self.db = ChatDB()
         self.send_threads = []
@@ -150,11 +151,19 @@ class ChatWindow(QWidget):
             return
 
         sender = FileSender(self.device.ip, file_path)
+
+        # 🔐 KEEP REFERENCE (VERY IMPORTANT)
+        self.file_threads.append(sender)
+
+        # Clean up after finish
+        sender.finished.connect(lambda: self.file_threads.remove(sender))
+
         sender.start()
 
         self.chat_view.append(
             f"<i>📎 Sent file: {Path(file_path).name}</i>"
         )
+
 
 
     # ---------- Receive ----------
