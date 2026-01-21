@@ -1,41 +1,50 @@
 import socket
 import json
-from pathlib import Path
 from PyQt6.QtCore import QThread
 from network.constants import FILE_PORT, CHUNK_SIZE
 
 
+def recv_exact(conn, size):
+    data = b""
+    while len(data) < size:
+        part = conn.recv(size - len(data))
+        if not part:
+            raise ConnectionError("Connection closed")
+        data += part
+    return data
+
+
 class FileSender(QThread):
-    def __init__(self, ip, file_path):
+    def __init__(self, ip, filename, save_path):
         super().__init__()
         self.ip = ip
-        self.file_path = Path(file_path)
+        self.filename = filename
+        self.save_path = save_path
 
     def run(self):
-        print(f"📤 Sending file to {self.ip}:{FILE_PORT}")
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((self.ip, FILE_PORT))
 
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect((self.ip, FILE_PORT))
+        # Request file
+        request = json.dumps({
+            "request": self.filename
+        }).encode()
 
-            filesize = self.file_path.stat().st_size
+        sock.sendall(len(request).to_bytes(4, "big"))
+        sock.sendall(request)
 
-            metadata = json.dumps({
-                "filename": self.file_path.name,
-                "filesize": filesize
-            }).encode()
+        # Receive metadata
+        meta_len = int.from_bytes(recv_exact(sock, 4), "big")
+        meta = json.loads(recv_exact(sock, meta_len).decode())
+        filesize = meta["filesize"]
 
-            sock.sendall(len(metadata).to_bytes(4, "big"))
-            sock.sendall(metadata)
+        received = 0
+        with open(self.save_path, "wb") as f:
+            while received < filesize:
+                chunk = sock.recv(min(CHUNK_SIZE, filesize - received))
+                if not chunk:
+                    break
+                f.write(chunk)
+                received += len(chunk)
 
-            with open(self.file_path, "rb") as f:
-                while True:
-                    chunk = f.read(CHUNK_SIZE)
-                    if not chunk:
-                        break
-                    sock.sendall(chunk)
-
-            sock.close()
-
-        except Exception as e:
-            print("File send error:", e)
+        sock.close()

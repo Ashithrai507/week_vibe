@@ -1,13 +1,14 @@
+import json
+from pathlib import Path
+
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTextEdit,
-    QLineEdit, QPushButton
+    QLineEdit, QPushButton, QFileDialog
 )
-from pathlib import Path
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QFileDialog
-from network.file_sender import FileSender
 
 from network.tcp_client import SendMessageThread
+from network.file_sender import FileSender
 from storage.chat_db import ChatDB
 
 
@@ -15,123 +16,62 @@ class ChatWindow(QWidget):
     def __init__(self, device):
         super().__init__()
         self.device = device
-        self.file_threads = []
-
         self.db = ChatDB()
+
         self.send_threads = []
+        self.file_threads = []
+        self.pending_files = {}  # filename -> Path (sender side)
 
         self.setWindowTitle(f"Chat – {device.name}")
-        self.setMinimumSize(460, 560)
+        self.setMinimumSize(480, 560)
 
-        layout = QVBoxLayout()
+        layout = QVBoxLayout(self)
 
-        # Chat view
+        # ---- Chat view ----
         self.chat_view = QTextEdit()
         self.chat_view.setReadOnly(True)
+        self.chat_view.setOpenExternalLinks(False)
+        self.chat_view.anchorClicked.connect(self.handle_link)
         self.chat_view.setStyleSheet("""
             QTextEdit {
                 background-color: #121212;
                 color: white;
                 border: none;
-                font-size: 16px;
+                font-size: 15px;
             }
         """)
 
-        # Input
+        # ---- Input ----
         self.input = QLineEdit()
         self.input.setPlaceholderText("Type a message…")
-        self.input.setStyleSheet("""
-            QLineEdit {
-                padding: 10px;
-                font-size: 15px;
-            }
-        """)
-        self.input.returnPressed.connect(self.send)
+        self.input.returnPressed.connect(self.send_text)
 
-        # Send button
+        # ---- Buttons ----
         send_btn = QPushButton("Send")
-        send_btn.setStyleSheet("""
-            QPushButton {
-                padding: 12px;
-                font-size: 15px;
-                background-color: #1e88e5;
-                color: white;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #1976d2;
-            }
-        """)
-        send_btn.clicked.connect(self.send)
+        send_btn.clicked.connect(self.send_text)
+
         file_btn = QPushButton("📎 Send File")
         file_btn.clicked.connect(self.send_file)
-        layout.addWidget(file_btn)
-
 
         layout.addWidget(self.chat_view)
         layout.addWidget(self.input)
         layout.addWidget(send_btn)
-        self.setLayout(layout)
+        layout.addWidget(file_btn)
 
-        # Load chat history
         self.load_history()
 
-    # ---------- Load stored messages ----------
+    # -------------------------
+    # History
+    # -------------------------
     def load_history(self):
         messages = self.db.load_messages(self.device.ip)
         for direction, msg in messages:
-            self.add_bubble(msg, direction)
+            self.add_text_bubble(msg, direction == "sent")
 
-    # ---------- Message bubble (TABLE BASED) ----------
-    def add_bubble(self, message, direction):
-        if direction == "sent":
-            html = f"""
-            <table width="100%" cellspacing="0" cellpadding="4">
-              <tr>
-                <td></td>
-                <td align="right">
-                  <div style="
-                    background:#1e88e5;
-                    color:white;
-                    padding:10px 14px;
-                    border-radius:14px;
-                    max-width:260px;
-                    font-size:16px;
-                  ">
-                    {message}
-                  </div>
-                </td>
-              </tr>
-            </table>
-            """
-        else:
-            html = f"""
-            <table width="100%" cellspacing="0" cellpadding="4">
-              <tr>
-                <td align="left">
-                  <div style="
-                    background:#2a2a2a;
-                    color:white;
-                    padding:10px 14px;
-                    border-radius:14px;
-                    max-width:260px;
-                    font-size:16px;
-                  ">
-                    {message}
-                  </div>
-                </td>
-                <td></td>
-              </tr>
-            </table>
-            """
-
-        self.chat_view.append(html)
-        self.chat_view.verticalScrollBar().setValue(
-            self.chat_view.verticalScrollBar().maximum()
-        )
-
-    # ---------- Send ----------
-    def send(self):
+    # -------------------------
+    # Text messaging
+    # -------------------------
+    def send_text(self):
         msg = self.input.text().strip()
         if not msg:
             return
@@ -142,31 +82,116 @@ class ChatWindow(QWidget):
         sender.start()
 
         self.db.save_message(self.device.ip, "sent", msg)
-        self.add_bubble(msg, "sent")
+        self.add_text_bubble(msg, sent=True)
         self.input.clear()
 
+    def receive(self, msg):
+        # Try file metadata
+        try:
+            data = json.loads(msg)
+            if data.get("type") == "file":
+                self.add_file_bubble(
+                    data["filename"],
+                    data["filesize"],
+                    sent=False
+                )
+                return
+        except Exception:
+            pass
+
+        # Normal text
+        self.db.save_message(self.device.ip, "received", msg)
+        self.add_text_bubble(msg, sent=False)
+
+    # -------------------------
+    # File sending (announce only)
+    # -------------------------
     def send_file(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Select file")
         if not file_path:
             return
 
-        sender = FileSender(self.device.ip, file_path)
+        path = Path(file_path)
 
-        # 🔐 KEEP REFERENCE (VERY IMPORTANT)
-        self.file_threads.append(sender)
+        meta = {
+            "type": "file",
+            "filename": path.name,
+            "filesize": path.stat().st_size
+        }
 
-        # Clean up after finish
-        sender.finished.connect(lambda: self.file_threads.remove(sender))
-
+        sender = SendMessageThread(self.device.ip, json.dumps(meta))
+        self.send_threads.append(sender)
+        sender.finished.connect(lambda: self.send_threads.remove(sender))
         sender.start()
 
-        self.chat_view.append(
-            f"<i>📎 Sent file: {Path(file_path).name}</i>"
+        self.pending_files[path.name] = path
+        self.add_file_bubble(path.name, path.stat().st_size, sent=True)
+
+    # -------------------------
+    # File download handling
+    # -------------------------
+    def handle_link(self, url):
+        if url.scheme() == "download":
+            filename = url.path().lstrip("/")
+            self.download_file(filename)
+
+    def download_file(self, filename):
+        save_path, _ = QFileDialog.getSaveFileName(
+            self, "Save File", filename
         )
+        if not save_path:
+            return
 
+        sender = FileSender(
+            self.device.ip,
+            filename,
+            save_path
+        )
+        self.file_threads.append(sender)
+        sender.finished.connect(lambda: self.file_threads.remove(sender))
+        sender.start()
 
+    # -------------------------
+    # UI bubbles
+    # -------------------------
+    def add_text_bubble(self, text, sent):
+        align = "right" if sent else "left"
+        color = "#1e88e5" if sent else "#2a2a2a"
 
-    # ---------- Receive ----------
-    def receive(self, msg):
-        self.db.save_message(self.device.ip, "received", msg)
-        self.add_bubble(msg, "received")
+        self.chat_view.append(f"""
+        <div style="text-align:{align}; margin:6px;">
+          <div style="
+            display:inline-block;
+            background:{color};
+            padding:8px 12px;
+            border-radius:12px;
+            max-width:70%;
+          ">
+            {text}
+          </div>
+        </div>
+        """)
+
+    def add_file_bubble(self, filename, size, sent):
+        align = "right" if sent else "left"
+        action = "" if sent else f"""
+            <a href="download:{filename}" style="color:#4fc3f7;">
+                Download
+            </a>
+        """
+
+        self.chat_view.append(f"""
+        <div style="text-align:{align}; margin:6px;">
+          <div style="
+            display:inline-block;
+            background:#333;
+            padding:10px;
+            border-radius:12px;
+            max-width:70%;
+          ">
+            📎 <b>{filename}</b><br>
+            {size // 1024} KB<br>
+            {action}
+          </div>
+        </div>
+        """)
