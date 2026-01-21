@@ -112,7 +112,7 @@ class ChatWindow(QWidget):
             return
 
         path = Path(file_path)
-
+        self.parent().file_server.add_file(path)
         meta = {
             "type": "file",
             "filename": path.name,

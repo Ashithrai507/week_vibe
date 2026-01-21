@@ -1,26 +1,30 @@
 import socket
 import json
 from pathlib import Path
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QThread
 from network.constants import FILE_PORT, CHUNK_SIZE
 
 
 def recv_exact(conn, size):
     data = b""
     while len(data) < size:
-        packet = conn.recv(size - len(data))
-        if not packet:
-            raise ConnectionError("Connection closed during recv")
-        data += packet
+        chunk = conn.recv(size - len(data))
+        if not chunk:
+            raise ConnectionError("Connection closed")
+        data += chunk
     return data
 
 
 class FileServer(QThread):
-    file_received = pyqtSignal(str)
-
     def __init__(self):
         super().__init__()
         self.running = True
+
+        # Files that THIS device can serve
+        self.shared_files = {}  # filename -> Path
+
+    def add_file(self, path: Path):
+        self.shared_files[path.name] = path
 
     def run(self):
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -33,42 +37,41 @@ class FileServer(QThread):
         while self.running:
             try:
                 conn, addr = server.accept()
-                print("📥 Incoming file connection from", addr)
+                print("📥 Incoming file request from", addr)
 
-                # ---- RECEIVE METADATA SAFELY ----
-                meta_len_bytes = recv_exact(conn, 4)
-                meta_len = int.from_bytes(meta_len_bytes, "big")
+                # ---- receive request ----
+                req_len = int.from_bytes(recv_exact(conn, 4), "big")
+                request = json.loads(recv_exact(conn, req_len).decode())
 
-                meta_bytes = recv_exact(conn, meta_len)
-                meta = json.loads(meta_bytes.decode())
+                filename = request.get("request")
+                if not filename or filename not in self.shared_files:
+                    print("❌ Requested file not found:", filename)
+                    conn.close()
+                    continue
 
-                filename = meta["filename"]
-                filesize = meta["filesize"]
+                path = self.shared_files[filename]
+                filesize = path.stat().st_size
 
-                download_dir = Path.home() / "Downloads" / "PyDrop"
-                download_dir.mkdir(parents=True, exist_ok=True)
+                # ---- send metadata ----
+                meta = json.dumps({
+                    "filename": filename,
+                    "filesize": filesize
+                }).encode()
 
-                filepath = download_dir / filename
+                conn.sendall(len(meta).to_bytes(4, "big"))
+                conn.sendall(meta)
 
-                print(f"📥 Receiving file {filename} ({filesize} bytes)")
+                # ---- send file ----
+                with open(path, "rb") as f:
+                    while chunk := f.read(CHUNK_SIZE):
+                        conn.sendall(chunk)
 
-                received = 0
-                with open(filepath, "wb") as f:
-                    while received < filesize:
-                        chunk = conn.recv(min(CHUNK_SIZE, filesize - received))
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        received += len(chunk)
-
+                print("✅ File sent:", filename)
                 conn.close()
-
-                print("✅ File saved to", filepath)
-                self.file_received.emit(filename)
 
             except Exception as e:
                 if self.running:
-                    print("❌ File receive error:", e)
+                    print("❌ File server error:", e)
 
         server.close()
 
