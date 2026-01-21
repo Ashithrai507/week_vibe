@@ -156,42 +156,66 @@ class ChatWindow(QWidget):
     # -------------------------
     def add_text_bubble(self, text, sent):
         align = "right" if sent else "left"
-        color = "#1e88e5" if sent else "#2a2a2a"
+        bg = "#1e88e5" if sent else "#2a2a2a"
+        radius = "12px 12px 4px 12px" if sent else "12px 12px 12px 4px"
 
         self.chat_view.append(f"""
-        <div style="text-align:{align}; margin:6px;">
-          <div style="
-            display:inline-block;
-            background:{color};
-            padding:8px 12px;
-            border-radius:12px;
-            max-width:70%;
-          ">
-            {text}
-          </div>
+        <div style="
+            display:flex;
+            justify-content:{'flex-end' if sent else 'flex-start'};
+            margin:4px 0;
+        ">
+            <div style="
+                background:{bg};
+                color:white;
+                padding:8px 12px;
+                border-radius:{radius};
+                max-width:65%;
+                word-wrap:break-word;
+                font-size:15px;
+            ">
+                {text}
+            </div>
         </div>
         """)
 
+
     def add_file_bubble(self, filename, size, sent):
-        align = "right" if sent else "left"
+        bg = "#1e88e5" if sent else "#2a2a2a"
+        radius = "12px 12px 4px 12px" if sent else "12px 12px 12px 4px"
+        justify = "flex-end" if sent else "flex-start"
+
         action = "" if sent else f"""
-            <a href="download:{filename}" style="color:#4fc3f7;">
-                Download
-            </a>
+            <div style="margin-top:6px;">
+                <a href="download:{filename}"
+                  style="
+                    color:#4fc3f7;
+                    text-decoration:none;
+                    font-weight:500;
+                  ">
+                    ⬇ Download
+                </a>
+            </div>
         """
 
         self.chat_view.append(f"""
-        <div style="text-align:{align}; margin:6px;">
-          <div style="
-            display:inline-block;
-            background:#333;
-            padding:10px;
-            border-radius:12px;
-            max-width:70%;
-          ">
-            📎 <b>{filename}</b><br>
-            {size // 1024} KB<br>
-            {action}
-          </div>
+        <div style="
+            display:flex;
+            justify-content:{justify};
+            margin:6px 0;
+        ">
+            <div style="
+                background:{bg};
+                color:white;
+                padding:10px 14px;
+                border-radius:{radius};
+                max-width:65%;
+                font-size:14px;
+            ">
+                📎 <b>{filename}</b><br>
+                <span style="opacity:0.8;">{size // 1024} KB</span>
+                {action}
+            </div>
         </div>
         """)
+
