@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QTextEdit,
+    QWidget, QVBoxLayout, QTextBrowser,
     QLineEdit, QPushButton, QFileDialog
 )
 from PyQt6.QtCore import Qt
@@ -28,10 +28,10 @@ class ChatWindow(QWidget):
         layout = QVBoxLayout(self)
 
         # ---- Chat view ----
-        self.chat_view = QTextEdit()
-        self.chat_view.setReadOnly(True)
+        self.chat_view = QTextBrowser()
         self.chat_view.setOpenExternalLinks(False)
         self.chat_view.anchorClicked.connect(self.handle_link)
+
         self.chat_view.setStyleSheet("""
             QTextEdit {
                 background-color: #121212;
