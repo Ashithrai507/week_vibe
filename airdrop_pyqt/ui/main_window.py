@@ -124,12 +124,13 @@ class MainWindow(QMainWindow):
     # ---------- MESSAGE ROUTING ----------
     def on_message_received(self, ip, message):
         if ip not in self.chat_windows:
-            device = self.devices.get(ip, Device(ip, ip))
+            device = self.devices.get(ip, Device(ip, ip, 6000))
             chat = ChatWindow(device)
             chat.show()
             self.chat_windows[ip] = chat
 
         self.chat_windows[ip].receive(message)
+
 
     # ---------- CLEAN SHUTDOWN ----------
     def closeEvent(self, event):
