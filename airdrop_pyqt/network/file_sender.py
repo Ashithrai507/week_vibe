@@ -12,6 +12,8 @@ class FileSender(QThread):
         self.file_path = Path(file_path)
 
     def run(self):
+        print(f"📤 Sending file to {self.ip}:{FILE_PORT}")
+
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect((self.ip, FILE_PORT))

@@ -22,6 +22,8 @@ class FileServer(QThread):
         server.listen(1)
 
         print("📂 File server listening on port", FILE_PORT)
+        conn, addr = server.accept()
+        print("📥 Incoming file connection from", addr)
 
         while self.running:
             try:
