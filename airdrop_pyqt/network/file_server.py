@@ -5,6 +5,16 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from network.constants import FILE_PORT, CHUNK_SIZE
 
 
+def recv_exact(conn, size):
+    data = b""
+    while len(data) < size:
+        packet = conn.recv(size - len(data))
+        if not packet:
+            raise ConnectionError("Connection closed during recv")
+        data += packet
+    return data
+
+
 class FileServer(QThread):
     file_received = pyqtSignal(str)
 
@@ -14,24 +24,23 @@ class FileServer(QThread):
 
     def run(self):
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-        # ✅ VERY IMPORTANT: allow reuse
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
         server.bind(("0.0.0.0", FILE_PORT))
-        server.listen(1)
+        server.listen(5)
 
         print("📂 File server listening on port", FILE_PORT)
-        conn, addr = server.accept()
-        print("📥 Incoming file connection from", addr)
 
         while self.running:
             try:
                 conn, addr = server.accept()
+                print("📥 Incoming file connection from", addr)
 
-                # ---- receive metadata ----
-                meta_len = int.from_bytes(conn.recv(4), "big")
-                meta = json.loads(conn.recv(meta_len).decode())
+                # ---- RECEIVE METADATA SAFELY ----
+                meta_len_bytes = recv_exact(conn, 4)
+                meta_len = int.from_bytes(meta_len_bytes, "big")
+
+                meta_bytes = recv_exact(conn, meta_len)
+                meta = json.loads(meta_bytes.decode())
 
                 filename = meta["filename"]
                 filesize = meta["filesize"]
@@ -41,21 +50,25 @@ class FileServer(QThread):
 
                 filepath = download_dir / filename
 
+                print(f"📥 Receiving file {filename} ({filesize} bytes)")
+
+                received = 0
                 with open(filepath, "wb") as f:
-                    received = 0
                     while received < filesize:
-                        data = conn.recv(CHUNK_SIZE)
-                        if not data:
+                        chunk = conn.recv(min(CHUNK_SIZE, filesize - received))
+                        if not chunk:
                             break
-                        f.write(data)
-                        received += len(data)
+                        f.write(chunk)
+                        received += len(chunk)
 
                 conn.close()
+
+                print("✅ File saved to", filepath)
                 self.file_received.emit(filename)
 
             except Exception as e:
                 if self.running:
-                    print("File receive error:", e)
+                    print("❌ File receive error:", e)
 
         server.close()
 
