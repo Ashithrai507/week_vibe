@@ -221,3 +221,9 @@ class ChatWindow(QWidget):
         </div>
         """)
 
+    def closeEvent(self, event):
+        # notify main window that this chat is closed
+        if self.device.ip in self.main_window.chat_windows:
+            del self.main_window.chat_windows[self.device.ip]
+        event.accept()
+

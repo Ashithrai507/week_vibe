@@ -112,24 +112,33 @@ class MainWindow(QMainWindow):
 
 
     def open_chat(self, device):
-        if device.ip in self.chat_windows:
-            self.chat_windows[device.ip].raise_()
-            self.chat_windows[device.ip].activateWindow()
+        ip = device.ip
+
+        if ip in self.chat_windows:
+            chat = self.chat_windows[ip]
+            chat.show()
+            chat.raise_()
+            chat.activateWindow()
             return
 
         chat = ChatWindow(device, self)
+        chat.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
         chat.show()
-        self.chat_windows[device.ip] = chat
+        self.chat_windows[ip] = chat
+
 
     # ---------- MESSAGE ROUTING ----------
     def on_message_received(self, ip, message):
+        device = self.devices.get(ip, Device(ip, ip, 6000))
+
         if ip not in self.chat_windows:
-            device = self.devices.get(ip, Device(ip, ip, 6000))
             chat = ChatWindow(device, self)
+            chat.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
             chat.show()
             self.chat_windows[ip] = chat
 
         self.chat_windows[ip].receive(message)
+
 
 
     # ---------- CLEAN SHUTDOWN ----------
