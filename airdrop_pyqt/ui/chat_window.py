@@ -13,9 +13,11 @@ from storage.chat_db import ChatDB
 
 
 class ChatWindow(QWidget):
-    def __init__(self, device):
+    def __init__(self, device, main_window):
         super().__init__()
         self.device = device
+        self.main_window = main_window
+
         self.db = ChatDB()
 
         self.send_threads = []
@@ -112,7 +114,7 @@ class ChatWindow(QWidget):
             return
 
         path = Path(file_path)
-        self.parent().file_server.add_file(path)
+        self.main_window.file_server.add_file(path)
         meta = {
             "type": "file",
             "filename": path.name,

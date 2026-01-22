@@ -117,7 +117,7 @@ class MainWindow(QMainWindow):
             self.chat_windows[device.ip].activateWindow()
             return
 
-        chat = ChatWindow(device)
+        chat = ChatWindow(device, self)
         chat.show()
         self.chat_windows[device.ip] = chat
 
@@ -125,7 +125,7 @@ class MainWindow(QMainWindow):
     def on_message_received(self, ip, message):
         if ip not in self.chat_windows:
             device = self.devices.get(ip, Device(ip, ip, 6000))
-            chat = ChatWindow(device)
+            chat = ChatWindow(device, self)
             chat.show()
             self.chat_windows[ip] = chat
 
